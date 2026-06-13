@@ -1,0 +1,5 @@
+language = "python3"
+run = "python bot.py"
+
+[env]
+PYTHON_UNBUFFERED = "1"
