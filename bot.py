@@ -2,34 +2,23 @@
 """
 SF × Z RESET BOT - Instagram Password Reset Bot
 A professional Telegram bot for Instagram password resets
-Author: SF × Z Team
 """
 
 import logging
 import os
-import json
 import asyncio
 import aiohttp
 from datetime import datetime
-from typing import Optional, Tuple
-from telegram import (
-    Update,
-    ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
     filters,
     ContextTypes,
     ConversationHandler,
 )
 from telegram.error import TelegramError
-from config import BOT_TOKEN, ADMIN_ID, MAX_ATTEMPTS, RATE_LIMIT_SECONDS
 
 # Configure logging
 logging.basicConfig(
@@ -42,13 +31,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Configuration
+BOT_TOKEN = "8990935337:AAGvvtZZ9DAgdoJ1n7TXYdYAaKFroiGHwps"
+ADMIN_ID = 8878678556
+MAX_ATTEMPTS = 3
+
 # Conversation states
 WAITING_FOR_USERNAME = 1
-VERIFYING_INPUT = 2
-PROCESSING_RESET = 3
-AWAITING_CONFIRMATION = 4
+AWAITING_CONFIRMATION = 2
 
-# Global user data storage for rate limiting and attempt tracking
+# Global user data
 user_sessions = {}
 
 
@@ -67,7 +59,9 @@ class InstagramResetBot:
         try:
             if self.application:
                 await self.application.bot.send_message(
-                    chat_id=self.admin_id, text=f"📊 {message}", parse_mode="Markdown"
+                    chat_id=self.admin_id, 
+                    text=f"📊 {message}",
+                    parse_mode="Markdown"
                 )
         except Exception as e:
             logger.error(f"Error sending admin message: {e}")
@@ -106,7 +100,9 @@ class InstagramResetBot:
         )
 
         await update.message.reply_text(
-            welcome_text, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove()
+            welcome_text, 
+            parse_mode="Markdown", 
+            reply_markup=ReplyKeyboardRemove()
         )
 
         # Log to admin
@@ -114,7 +110,7 @@ class InstagramResetBot:
 
         return WAITING_FOR_USERNAME
 
-    async def validate_input(self, user_input: str) -> Tuple[bool, str]:
+    async def validate_input(self, user_input: str):
         """Validate username or email format."""
         user_input = user_input.strip()
 
@@ -124,27 +120,24 @@ class InstagramResetBot:
         if len(user_input) > 100:
             return False, "❌ Input is too long. Maximum 100 characters allowed."
 
-        # Check for special characters that are not allowed in usernames or emails
-        invalid_chars = set('<>:"\\|?*')
+        # Check for special characters
+        invalid_chars = set('<>:"/\\|?*')
         if any(char in user_input for char in invalid_chars):
             return False, "❌ Invalid characters detected. Please enter a valid username or email."
 
         # Email validation
         if "@" in user_input:
-            if "@" in user_input and "." in user_input:
+            if "." in user_input:
                 parts = user_input.split("@")
                 if len(parts) == 2 and len(parts[0]) > 0 and len(parts[1]) > 3:
                     return True, "email"
-                else:
-                    return False, "❌ Invalid email format. Use: example@domain.com"
-            else:
-                return False, "❌ Invalid email format."
+            return False, "❌ Invalid email format. Use: example@domain.com"
 
-        # Username validation (Instagram usernames)
+        # Username validation
         if user_input.replace("_", "").replace(".", "").isalnum() and not user_input[0].isdigit():
             return True, "username"
-        else:
-            return False, "❌ Invalid username. Instagram usernames contain only letters, numbers, dots, and underscores."
+        
+        return False, "❌ Invalid username. Use only letters, numbers, dots, and underscores."
 
     async def receive_username_or_email(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -158,8 +151,7 @@ class InstagramResetBot:
             if self.reset_attempts[user_id] >= MAX_ATTEMPTS:
                 error_msg = (
                     "❌ *Too Many Attempts*\n\n"
-                    "You've exceeded the maximum attempts. Please try again later.\n"
-                    "For assistance, visit: https://help.instagram.com/"
+                    "You've exceeded the maximum attempts. Please try again later."
                 )
                 await update.message.reply_text(error_msg, parse_mode="Markdown")
                 return ConversationHandler.END
@@ -207,7 +199,9 @@ class InstagramResetBot:
                 "Feel free to use /start anytime to reset your password."
             )
             await update.message.reply_text(
-                cancel_msg, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove()
+                cancel_msg, 
+                parse_mode="Markdown", 
+                reply_markup=ReplyKeyboardRemove()
             )
             return ConversationHandler.END
 
@@ -289,37 +283,27 @@ class InstagramResetBot:
         try:
             reset_url = "https://www.instagram.com/api/v1/accounts/account_recovery_send_security_email/"
 
-            # Prepare headers
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Content-Type": "application/x-www-form-urlencoded",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Referer": "https://www.instagram.com/accounts/password/reset/",
             }
 
-            # Prepare data
+            data = {}
             if input_type == "email":
                 data = {"email": user_input}
             else:
                 data = {"username": user_input}
 
-            # Make async request
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    reset_url, data=data, headers=headers, timeout=aiohttp.ClientTimeout(total=15)
+                    reset_url, 
+                    data=data, 
+                    headers=headers, 
+                    timeout=aiohttp.ClientTimeout(total=15)
                 ) as response:
-                    if response.status in [200, 201, 202]:
-                        logger.info(f"✅ Password reset successful for {input_type}: {user_input[:20]}")
-                        return True
-                    else:
-                        logger.warning(
-                            f"⚠️ Instagram returned status {response.status} for {input_type}: {user_input[:20]}"
-                        )
-                        return True
+                    logger.info(f"✅ Password reset request sent for {input_type}: {user_input[:20]} (Status: {response.status})")
+                    return True
 
-        except asyncio.TimeoutError:
-            logger.error("Request timeout when contacting Instagram")
-            return True
         except Exception as e:
             logger.error(f"Error during password reset: {str(e)}")
             return True
@@ -359,27 +343,24 @@ class InstagramResetBot:
         about_text = (
             "╔════════════════════════════════════════╗\n"
             "║    🔐 About SF × Z RESET BOT 🔐       ║\n"
-            "╚════════════════════════════════════════╝\n\n"
+            "╚═══��════════════════════════════════════╝\n\n"
             "*Version:* 1.0.0\n"
             "*Status:* ✅ Active & Running\n\n"
             "*What We Do:*\n"
-            "We help Instagram users reset their forgotten passwords securely and quickly. "
-            "Our bot sends official password reset emails through Instagram's official channels.\n\n"
+            "We help Instagram users reset their forgotten passwords securely and quickly.\n\n"
             "*Why Choose Us?*\n"
             "✅ Fast & Reliable\n"
             "✅ 24/7 Available\n"
             "✅ 100% Secure\n"
-            "✅ Official Instagram Integration\n"
             "✅ User-Friendly Interface\n\n"
             "*Features:*\n"
             "• Username or Email support\n"
             "• Input validation\n"
-            "• Rate limiting for security\n"
+            "• Rate limiting\n"
             "• Admin logging\n"
             "• Professional error handling\n\n"
             "*Privacy:*\n"
-            "We do NOT store your passwords or account credentials. "
-            "We only process official reset requests through Instagram's systems.\n\n"
+            "We do NOT store passwords. Only process official reset requests through Instagram.\n\n"
             "*© 2024 SF × Z RESET BOT*"
         )
 
@@ -414,7 +395,11 @@ class InstagramResetBot:
             "Thank you for using SF × Z RESET BOT! 🙏"
         )
 
-        await update.message.reply_text(cancel_text, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(
+            cancel_text, 
+            parse_mode="Markdown", 
+            reply_markup=ReplyKeyboardRemove()
+        )
 
         return ConversationHandler.END
 
@@ -435,12 +420,13 @@ class InstagramResetBot:
                 logger.error(f"Error sending error message: {e}")
 
         # Log to admin
-        await self.log_admin(f"❌ Error occurred:\n`{str(context.error)}`")
+        await self.log_admin(f"❌ Error occurred: {str(context.error)}")
 
     def run(self) -> None:
         """Start the bot."""
         if not self.token:
             logger.error("❌ BOT_TOKEN not configured!")
+            print("❌ BOT_TOKEN not configured!")
             return
 
         logger.info("🚀 Starting SF × Z RESET BOT...")
@@ -461,7 +447,6 @@ class InstagramResetBot:
                 ],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
-            allow_user_context=True,
         )
 
         # Add handlers
@@ -475,12 +460,12 @@ class InstagramResetBot:
         application.add_error_handler(self.error_handler)
 
         # Start polling
-        logger.info("✅ Bot is polling for messages...")
         print("\n" + "=" * 50)
         print("🤖 SF × Z RESET BOT - RUNNING")
         print("=" * 50)
         print(f"Token: {self.token[:20]}...")
         print(f"Admin ID: {self.admin_id}")
+        print("Bot is polling for messages...")
         print("Press Ctrl+C to stop")
         print("=" * 50 + "\n")
 
@@ -489,6 +474,9 @@ class InstagramResetBot:
         except KeyboardInterrupt:
             logger.info("🛑 Bot stopped by user")
             print("\n🛑 Bot stopped.")
+        except Exception as e:
+            logger.error(f"Fatal error: {e}")
+            print(f"\n❌ Fatal error: {e}")
 
 
 def main():
